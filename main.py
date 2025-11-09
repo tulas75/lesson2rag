@@ -30,6 +30,44 @@ class SentenceTransformerEmbeddings(Embeddings):
         return embedding[0].tolist()
 
 
+class APIEmbeddings(Embeddings):
+    """Wrapper per embeddings API tramite litellm compatibile con LangChain"""
+    def __init__(self, provider: str, model_name: str):
+        self.provider = provider
+        self.model_name = model_name
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        import litellm
+        embeddings = []
+        for text in texts:
+            try:
+                # Use litellm to get embeddings
+                response = litellm.embedding(
+                    model=self.model_name,
+                    input=[text],
+                    custom_llm_provider=self.provider
+                )
+                embeddings.append(response.data[0]['embedding'])
+            except Exception as e:
+                logger.error(f"Error getting embedding: {e}")
+                # Fallback to a zero vector with typical dimension
+                embeddings.append([0.0] * 384)  # Common embedding dimension
+        return embeddings
+
+    def embed_query(self, text: str) -> List[float]:
+        import litellm
+        try:
+            response = litellm.embedding(
+                model=self.model_name,
+                input=[text],
+                custom_llm_provider=self.provider
+            )
+            return response.data[0]['embedding']
+        except Exception as e:
+            logger.error(f"Error getting embedding: {e}")
+            return [0.0] * 384  # Common embedding dimension
+
+
 class PipelineLezioniRAG:
     """Pipeline completa per processare lezioni e creare vector store"""
     
@@ -37,11 +75,13 @@ class PipelineLezioniRAG:
         self,
         llm_model: str = "gemini/gemini-2.5-flash",
         embedding_model: str = "BAAI/bge-m3",
+        embedding_api_provider: str = None,
         pg_connection: str = None,
         collection_name: str = "Compass"
     ):
         self.llm_model = llm_model
         self.embedding_model_name = embedding_model
+        self.embedding_api_provider = embedding_api_provider
         self.pg_connection = pg_connection
         self.collection_name = collection_name
         
@@ -223,8 +263,14 @@ IMPORTANTE:
     def _inizializza_embedding_model(self):
         """Inizializza il modello di embedding"""
         if not self.embedding_model:
-            logger.info(f"→ Caricamento modello embedding: {self.embedding_model_name}")
-            self.embedding_model = SentenceTransformerEmbeddings(self.embedding_model_name)
+            if self.embedding_api_provider:
+                # Use API-based embeddings
+                logger.info(f"→ Inizializzazione embedding API: {self.embedding_api_provider}/{self.embedding_model_name}")
+                self.embedding_model = APIEmbeddings(self.embedding_api_provider, self.embedding_model_name)
+            else:
+                # Use local embeddings
+                logger.info(f"→ Caricamento modello embedding locale: {self.embedding_model_name}")
+                self.embedding_model = SentenceTransformerEmbeddings(self.embedding_model_name)
             logger.info("✓ Modello embedding caricato")
     
     def _estrai_voci_per_embedding(

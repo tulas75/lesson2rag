@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+# Carica immediatamente le variabili d'ambiente prima di qualsiasi altra importazione
+load_dotenv()
+
 import streamlit as st
 import json
 import logging
@@ -6,10 +10,6 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 from typing import Dict, List, Any
-from dotenv import load_dotenv
-
-# Carica variabili d'ambiente da .env se esiste
-load_dotenv()
 
 # Import della tua pipeline
 from main import PipelineLezioniRAG
@@ -278,12 +278,12 @@ def main():
         usa_vector_store = st.checkbox("Salva in Vector Store", value=False)
         
         if usa_vector_store:
-            pg_host = st.text_input("Host", value="localhost")
-            pg_port = st.text_input("Port", value="5432")
-            pg_user = st.text_input("Username", value="postgres")
-            pg_password = st.text_input("Password", type="password")
-            pg_database = st.text_input("Database", value="pandino")
-            collection_name = st.text_input("Collection", value="Compass")
+            pg_host = st.text_input("Host", value=os.getenv("PGHOST", "localhost"))
+            pg_port = st.text_input("Port", value=os.getenv("PGPORT", "5432"))
+            pg_user = st.text_input("Username", value=os.getenv("PGUSER", "postgres"))
+            pg_password = st.text_input("Password", type="password", value=os.getenv("PGPASSWORD", ""))
+            pg_database = st.text_input("Database", value=os.getenv("PGDATABASE", "pandino"))
+            collection_name = st.text_input("Collection", value=os.getenv("COLLECTION_NAME", "Compass"))
             
             pg_connection = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
         else:
@@ -322,16 +322,32 @@ def main():
                     if embedding_api_key and st.button("Testa Embeddings", key="test_embed"):
                         with st.spinner("Test in corso..."):
                             try:
-                                from pipeline_completa_lezioni import APIEmbeddings
+                                from main import APIEmbeddings
                                 test_embedder = APIEmbeddings(embedding_api_provider, embedding_model)
                                 test_emb = test_embedder.embed_query("test")
                                 st.success(f"✅ Embeddings funzionanti!")
-                                st.caption(f"Dimensione: {len(test_emb)} dim")
+                                st.caption(f"Dimensione: {len(test_emb) if test_emb else 'N/A'} dim")
                             except Exception as e:
                                 st.error(f"❌ Errore: {str(e)}")
                 else:
                     st.write("**Embeddings Locali**")
                     st.info("ℹ️ Verranno caricati al primo utilizzo")
+                
+                # Test PostgreSQL if vector store is enabled
+                if usa_vector_store:
+                    st.write("**Test Database**")
+                    if st.button("Testa PostgreSQL", key="test_db"):
+                        with st.spinner("Connessione al database..."):
+                            try:
+                                # Create the connection string in the same format used by the pipeline
+                                connection_string = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
+                                # Basic validation - check if all required fields are present
+                                if all([pg_user, pg_password, pg_host, pg_database]):
+                                    st.success("✅ Stringa connessione valida!")
+                                else:
+                                    st.error("❌ Parametri di connessione incompleti")
+                            except Exception as e:
+                                st.error(f"❌ Errore connessione DB: {str(e)}")
         
         # Info
         st.info("💡 **Tip**: Per iniziare usa Gemini + Embeddings Locali (100% gratuito)")
@@ -599,16 +615,22 @@ def main():
                 try:
                     with st.spinner("Ricerca in corso..."):
                         pipeline = st.session_state.pipeline
-                        results = pipeline.vector_store.similarity_search(query, k=k_results)
+                        # Use similarity_search_with_score to get both documents and similarity scores
+                        results = pipeline.vector_store.similarity_search_with_score(query, k=k_results)
                     
                     st.success(f"✅ Trovati {len(results)} risultati")
                     
                     # Mostra risultati
-                    for i, doc in enumerate(results, 1):
+                    for i, (doc, score) in enumerate(results, 1):
                         with st.container():
                             st.markdown(f"### 📄 Risultato {i}")
                             
-                            col1, col2 = st.columns([2, 1])
+                            # Calculate similarity from distance (score is typically a distance)
+                            # For cosine similarity, similarity = 1 - distance
+                            similarity = 1 - score
+                            similarity_percent = similarity * 100
+
+                            col1, col2, col3 = st.columns([2, 1, 1])
                             with col1:
                                 st.write(f"**Source:** {doc.metadata.get('source', 'N/A')}")
                             with col2:
@@ -619,6 +641,8 @@ def main():
                                     'domanda': '❓'
                                 }.get(tipo, '📄')
                                 st.write(f"**Tipo:** {tipo_emoji} {tipo}")
+                            with col3:
+                                st.metric("**Similarità**", f"{similarity_percent:.1f}%")
                             
                             st.markdown("**Contenuto:**")
                             st.info(doc.page_content)
