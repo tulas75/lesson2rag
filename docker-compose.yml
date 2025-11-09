@@ -1,0 +1,36 @@
+services:
+  # Streamlit App
+  rag-pipeline:
+    build: .
+    container_name: rag-pipeline-app
+    ports:
+      - "8501:8501"
+    environment:
+      # API Keys (inserisci le tue chiavi o usa file .env)
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      
+      # PostgreSQL Connection (se usi il container postgres)
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=ragpassword
+      - PGDATABASE=ragdb
+      - COLLECTION_NAME=Compass
+    volumes:
+      # Persisti output e temp
+      - ./output:/app/output
+      - ./temp:/app/temp
+      # Opzionale: monta .env per API keys
+      - ./.env:/app/.env:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag-network
+    restart: unless-stopped
