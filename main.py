@@ -103,10 +103,12 @@ class PipelineLezioniRAG:
     
     def analizza_struttura(self, trascrizione: str) -> Dict:
         """Analizza la struttura della lezione"""
-        prompt = f"""Sei un esperto di analisi didattica. Analizza questa trascrizione di una lezione universitaria in italiano e fornisci una struttura dettagliata del contenuto.
+        prompt = f"""Sei un esperto di analisi didattica. Analisi questa trascrizione di una lezione universitaria in italiano e fornisci una struttura dettagliata del contenuto.
 
 TRASCRIZIONE:
 "{trascrizione}"
+
+RISPOSTA: Rispondi SOLO con un oggetto JSON valido, senza aggiungere alcun altro testo, commento o spiegazione prima o dopo. Fornisci solo il JSON.
 
 Fornisci l'output in formato JSON strutturale come segue:
 
@@ -194,8 +196,34 @@ IMPORTANTE:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
+        
+        # Estrai il contenuto JSON usando regex per maggiore robustezza
+        import re
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            content = json_match.group(0)
+        
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Errore nel parsing JSON: {e}")
+            logger.error(f"Contenuto problematico: {content[:500]}...")
+            # Prova a correggere errori comuni nel JSON
+            # Rimuovi eventuali caratteri fuori dal JSON
+            content = content.strip()
+            if not content.startswith('{'):
+                start = content.find('{')
+                if start != -1:
+                    content = content[start:]
+            if not content.endswith('}'):
+                end = content.rfind('}')
+                if end != -1:
+                    content = content[:end+1]
             
-        return json.loads(content)
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                raise ValueError(f"Impossibile parsare la risposta JSON dal modello: {content[:200]}...")
     
     # ========== STEP 2: SEGMENTAZIONE IN UNITÀ ==========
     
@@ -208,6 +236,8 @@ CONTESTO DELLA LEZIONE:
 
 TRASCRIZIONE:
 "{trascrizione}"
+
+RISPOSTA: Rispondi SOLO con un oggetto JSON valido, senza aggiungere alcun altro testo, commento o spiegazione prima o dopo. Fornisci solo il JSON.
 
 CRITERI DI SEGMENTAZIONE:
 1. Ogni unità deve spiegare un concetto completo o un sotto-argomento coerente
@@ -255,8 +285,34 @@ IMPORTANTE:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
+        
+        # Estrai il contenuto JSON usando regex per maggiore robustezza
+        import re
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            content = json_match.group(0)
+        
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Errore nel parsing JSON: {e}")
+            logger.error(f"Contenuto problematico: {content[:500]}...")
+            # Prova a correggere errori comuni nel JSON
+            # Rimuovi eventuali caratteri fuori dal JSON
+            content = content.strip()
+            if not content.startswith('{'):
+                start = content.find('{')
+                if start != -1:
+                    content = content[start:]
+            if not content.endswith('}'):
+                end = content.rfind('}')
+                if end != -1:
+                    content = content[:end+1]
             
-        return json.loads(content)
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                raise ValueError(f"Impossibile parsare la risposta JSON dal modello: {content[:200]}...")
     
     # ========== STEP 3: CREAZIONE EMBEDDINGS ==========
     

@@ -275,7 +275,7 @@ def main():
         
         # Configurazione Database
         st.subheader("💾 Database PostgreSQL")
-        usa_vector_store = st.checkbox("Salva in Vector Store", value=False)
+        usa_vector_store = st.checkbox("Salva in Vector Store", value=True)
         
         if usa_vector_store:
             pg_host = st.text_input("Host", value=os.getenv("PGHOST", "localhost"))
